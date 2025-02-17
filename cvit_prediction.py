@@ -8,6 +8,9 @@ from facenet_pytorch import MTCNN
 from model.cvit import CViT
 from helpers.loader import load_data
 from model.pred_func import *
+import streamlit as st
+import matplotlib.pyplot as plt
+from fpdf import FPDF
 
 
 def vids(
@@ -25,6 +28,7 @@ def vids(
 
         try:
             if is_video(curr_vid):
+                st.write(f"Processing video: {filename}")
                 result, accuracy, count, pred = predict(
                     curr_vid,
                     model,
@@ -36,14 +40,14 @@ def vids(
                     count,
                 )
                 f, r = (f + 1, r) if "FAKE" == real_or_fake(pred[0]) else (f, r + 1)
-                print(
+                st.write(
                     f"\nPrediction: {pred[1]} {real_or_fake(pred[0])} \t\tFake: {f} Real: {r}"
                 )
             else:
-                print(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
+                st.write(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
 
         except Exception as e:
-            print(f"An error occurred: {str(e)}")
+            st.write(f"An error occurred: {str(e)}")
 
     return result
 
@@ -83,6 +87,7 @@ def faceforensics(
                         curr_vid = os.path.join(dirpath, filename)
                         compression = "c23" if "c23" in curr_vid else "c40"
                         if is_video(curr_vid):
+                            st.write(f"Processing video: {filename}")
                             result, accuracy, count, _ = predict(
                                 curr_vid,
                                 model,
@@ -97,10 +102,10 @@ def faceforensics(
                                 compression,
                             )
                         else:
-                            print(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
+                            st.write(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
 
                 except Exception as e:
-                    print(f"An error occurred: {str(e)}")
+                    st.write(f"An error occurred: {str(e)}")
 
     return result
 
@@ -123,6 +128,7 @@ def timit(cvit_weight, root_dir="DeepfakeTIMIT", dataset=None, num_frames=15, ne
                         curr_vid = os.path.join(subfolder_path, filename)
                         try:
                             if is_video(curr_vid):
+                                st.write(f"Processing video: {filename}")
                                 result, accuracy, count, _ = predict(
                                     curr_vid,
                                     model,
@@ -136,10 +142,10 @@ def timit(cvit_weight, root_dir="DeepfakeTIMIT", dataset=None, num_frames=15, ne
                                     "FAKE",
                                 )
                             else:
-                                print(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
+                                st.write(f"Invalid video file: {curr_vid}. Please provide a valid video file.")
 
                         except Exception as e:
-                            print(f"An error occurred: {str(e)}")
+                            st.write(f"An error occurred: {str(e)}")
 
     return result
 
@@ -169,6 +175,7 @@ def dfdc(
 
         try:
             if is_video(dfdc_file):
+                st.write(f"Processing video: {dfdc}")
                 result, accuracy, count, _ = predict(
                     dfdc_file,
                     model,
@@ -182,10 +189,10 @@ def dfdc(
                     dfdc_meta[dfdc]["label"],
                 )
             else:
-                print(f"Invalid video file: {dfdc_file}. Please provide a valid video file.")
+                st.write(f"Invalid video file: {dfdc_file}. Please provide a valid video file.")
 
         except Exception as e:
-            print(f"An error occurred: {str(e)}")
+            st.write(f"An error occurred: {str(e)}")
 
     return result
 
@@ -208,6 +215,7 @@ def celeb(cvit_weight, root_dir="Celeb-DF-v2", dataset=None, num_frames=15, net=
 
         try:
             if is_video(vid):
+                st.write(f"Processing video: {filename}")
                 result, accuracy, count, _ = predict(
                     vid,
                     model,
@@ -221,10 +229,10 @@ def celeb(cvit_weight, root_dir="Celeb-DF-v2", dataset=None, num_frames=15, net=
                     correct_label,
                 )
             else:
-                print(f"Invalid video file: {vid}. Please provide a valid video file.")
+                st.write(f"Invalid video file: {vid}. Please provide a valid video file.")
 
         except Exception as e:
-            print(f"An error occurred x: {str(e)}")
+            st.write(f"An error occurred x: {str(e)}")
 
     return result
 
@@ -243,7 +251,7 @@ def predict(
     compression=None,
 ):
     count += 1
-    print(f"\n\n{str(count)} Loading... {vid}")
+    st.write(f"\n\n{str(count)} Loading... {vid}")
 
     df = df_face(vid, num_frames)  # extract face from the frames
 
@@ -262,9 +270,21 @@ def predict(
     if accuracy > -1:
         if correct_label == real_or_fake(y):
             accuracy += 1
-        print(
+        st.write(
             f"\nPrediction: {y_val} {real_or_fake(y)} \t\t {accuracy}/{count} {accuracy/count}"
         )
+
+    # Detailed breakdown of prediction results
+    st.write(f"Confidence Score: {y_val}")
+    st.write(f"Prediction: {real_or_fake(y)}")
+
+    # Graph of frame-by-frame analysis
+    frame_confidences = [pred_vid(preprocess_frame([frame]), model)[1] for frame in df]
+    plt.plot(frame_confidences)
+    plt.xlabel('Frame')
+    plt.ylabel('Confidence Score')
+    plt.title('Frame-by-Frame Analysis')
+    st.pyplot(plt)
 
     return result, accuracy, count, [y, y_val]
 
@@ -317,6 +337,28 @@ def main():
 
     with open(file_path, "w") as f:
         json.dump(result, f)
+    
+    # Option to download a PDF report of the analysis results
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Deepfake Detection Report", ln=True, align="C")
+    pdf.cell(200, 10, txt=f"Dataset: {dataset}", ln=True, align="L")
+    pdf.cell(200, 10, txt=f"Model: {net}", ln=True, align="L")
+    pdf.cell(200, 10, txt=f"Weight: {cvit_weight}", ln=True, align="L")
+    pdf.cell(200, 10, txt=f"Date: {curr_time}", ln=True, align="L")
+    pdf.cell(200, 10, txt="Results:", ln=True, align="L")
+    for i, name in enumerate(result["video"]["name"]):
+        pdf.cell(200, 10, txt=f"Video: {name}", ln=True, align="L")
+        pdf.cell(200, 10, txt=f"Prediction: {result['video']['pred_label'][i]}", ln=True, align="L")
+        pdf.cell(200, 10, txt=f"Confidence Score: {result['video']['pred'][i]}", ln=True, align="L")
+        pdf.cell(200, 10, txt=f"Class: {result['video']['klass'][i]}", ln=True, align="L")
+        pdf.cell(200, 10, txt=f"Correct Label: {result['video']['correct_label'][i]}", ln=True, align="L")
+        pdf.cell(200, 10, txt="", ln=True, align="L")
+    pdf_output_path = os.path.join("result", f"report_{dataset}_{net}_{curr_time}.pdf")
+    pdf.output(pdf_output_path)
+    st.write(f"PDF report generated: {pdf_output_path}")
+
     end_time = perf_counter()
     print("\n\n--- %s seconds ---" % (end_time - start_time))
 
